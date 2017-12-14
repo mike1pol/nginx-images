@@ -1,6 +1,12 @@
 # nginx-images
 nginx image resizer and cache
 
+## Build
+build image
+```
+docker build -t nginx-images .
+```
+
 ## Run
 ```
 docker run -p 8080:80 -e BUCKET_URL=www.googleapis.com/download/storage/v1/b/my-bucket/0 nginx-images
