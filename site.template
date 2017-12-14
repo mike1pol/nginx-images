@@ -3,6 +3,7 @@ log_subrequest on;
 
 server {
   listen 80;
+  root   /usr/share/nginx/html;
   server_name localhost;
   location /${DOLLAR}media/ {
     proxy_pass http://127.0.0.1:10177;
@@ -18,7 +19,7 @@ server {
   server_name  localhost;
   resolver 8.8.8.8; # Use Google for DNS.
   resolver_timeout 60s;
-  
+
   set ${DOLLAR}bucket '${BUCKET_URL}';
 
   proxy_buffering off;
