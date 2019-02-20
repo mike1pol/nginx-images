@@ -42,7 +42,7 @@ server {
 server {
     listen       10178;
     server_name  localhost;
-    resolver 8.8.8.8; # Use Google for DNS.
+    resolver 8.8.8.8 ipv6=off; # Use Google for DNS.
     resolver_timeout 60s;
 
     set ${DOLLAR}bucket '${BUCKET_URL}';
