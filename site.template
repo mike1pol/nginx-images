@@ -2,61 +2,82 @@ proxy_cache_path /tmp/nginx_cache levels=1:2 keys_zone=nginx_cache:100M max_size
 log_subrequest on;
 
 server {
-  listen 80;
-  root   /usr/share/nginx/html;
-  server_name localhost;
-  location /${DOLLAR}media/ {
-    proxy_pass http://127.0.0.1:10177;
-    proxy_cache nginx_cache;
-    proxy_cache_key “${DOLLAR}proxy_host${DOLLAR}uri${DOLLAR}is_args${DOLLAR}args”;
-    proxy_cache_valid 30d; # Cache valid images for 30 days.
-    expires 30d;
-  }
+    listen 80;
+    root   /usr/share/nginx/html;
+    server_name localhost;
+    location /${DOLLAR}media/ {
+        proxy_pass http://127.0.0.1:10177;
+        proxy_cache nginx_cache;
+        proxy_cache_key “${DOLLAR}proxy_host${DOLLAR}uri${DOLLAR}is_args${DOLLAR}args”;
+        proxy_cache_valid 30d; # Cache valid images for 30 days.
+        expires 30d;
+    }
 }
 
 server {
-  listen       10177;
-  server_name  localhost;
-  resolver 8.8.8.8; # Use Google for DNS.
-  resolver_timeout 60s;
+    listen       10177;
+    server_name  localhost;
 
-  set ${DOLLAR}bucket '${BUCKET_URL}';
+    location ~ ^/\${DOLLAR}media/([0-9]+)x([0-9]+)/(.+) {
+        image_filter_buffer 20M; # Will return 415 if image is bigger than this
+        image_filter_jpeg_quality 75; # Desired JPG quality
+        image_filter_interlace on; # For progressive JPG
+        image_filter crop ${DOLLAR}1 ${DOLLAR}2;
+        proxy_pass http://127.0.0.1:10178/img/${DOLLAR}3;
+    }
 
-  proxy_buffering off;
-  proxy_http_version 1.1;
-  proxy_pass_request_body off; # Not needed by AWS.
-  proxy_pass_request_headers off;
-  proxy_hide_header "X-GUploader-UploadID";
-  proxy_hide_header "Content-Disposition";
-  proxy_hide_header "Vary";
-  proxy_hide_header "X-Goog-Generation";
-  proxy_hide_header "X-Goog-Hash";
-  proxy_hide_header "X-Goog-Metageneration";
-  proxy_hide_header "X-Goog-Storage-Class";
-  proxy_hide_header "Alt-Svc";
-  proxy_hide_header "Pragma";
-  proxy_hide_header "Cache-Control";
-  proxy_hide_header "Expires";
+    location ~ ^/\${DOLLAR}media/([0-9]+)/(.+) {
+        image_filter_buffer 20M; # Will return 415 if image is bigger than this
+        image_filter_jpeg_quality 75; # Desired JPG quality
+        image_filter_interlace on; # For progressive JPG
+        image_filter resize ${DOLLAR}1 -;
+        proxy_pass http://127.0.0.1:10178/img/${DOLLAR}2;
+    }
 
-  location ~ ^/\${DOLLAR}media/([0-9]+)x([0-9]+)/(.+) {
-    image_filter_buffer 20M; # Will return 415 if image is bigger than this
-    image_filter_jpeg_quality 75; # Desired JPG quality
-    image_filter_interlace on; # For progressive JPG
-    image_filter crop ${DOLLAR}1 ${DOLLAR}2;
-    proxy_pass https://${DOLLAR}bucket/${DOLLAR}3?alt=media;
-  }
-
-  location ~ ^/\${DOLLAR}media/([0-9]+)/(.+) {
-    image_filter_buffer 20M; # Will return 415 if image is bigger than this
-    image_filter_jpeg_quality 75; # Desired JPG quality
-    image_filter_interlace on; # For progressive JPG
-    image_filter resize ${DOLLAR}1 -;
-    proxy_pass https://${DOLLAR}bucket/${DOLLAR}2?alt=media;
-  }
-
-  location ~ ^/\${DOLLAR}media/(.+) {
-    proxy_pass https://${DOLLAR}bucket/${DOLLAR}1?alt=media;
-  }
-
+    location ~ ^/\${DOLLAR}media/(.+) {
+        proxy_pass http://127.0.0.1:10178/img/${DOLLAR}1;
+    }
 }
 
+server {
+    listen       10178;
+    server_name  localhost;
+    resolver 8.8.8.8; # Use Google for DNS.
+    resolver_timeout 60s;
+
+    set ${DOLLAR}bucket '${BUCKET_URL}';
+
+    proxy_buffering off;
+    proxy_http_version 1.1;
+    proxy_pass_request_body off; # Not needed by AWS.
+    proxy_pass_request_headers off;
+    proxy_hide_header "X-GUploader-UploadID";
+    proxy_hide_header "Content-Disposition";
+    proxy_hide_header "Vary";
+    proxy_hide_header "X-Goog-Generation";
+    proxy_hide_header "X-Goog-Hash";
+    proxy_hide_header "X-Goog-Metageneration";
+    proxy_hide_header "X-Goog-Storage-Class";
+    proxy_hide_header "Alt-Svc";
+    proxy_hide_header "Pragma";
+    proxy_hide_header "Cache-Control";
+    proxy_hide_header "Expires";
+
+    proxy_connect_timeout   60;
+    proxy_send_timeout      60;
+    proxy_read_timeout      60;
+
+    location ~ ^/img/(.+) {
+        rewrite ^ ${DOLLAR}request_uri;
+        rewrite ^/img/(.*) ${DOLLAR}1 break;
+        return 400;
+
+        proxy_pass https://${DOLLAR}bucket/${DOLLAR}1?alt=media;
+        error_page 415 =404 /empty.gif;
+        proxy_cache nginx_cache;
+        proxy_cache_key "temp_${DOLLAR}proxy_host${DOLLAR}uri${DOLLAR}is_args${DOLLAR}args";
+        proxy_cache_valid 60s;
+        expires 60s;
+    }
+
+}
